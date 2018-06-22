@@ -25,46 +25,24 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
-#include "particle.h"
+#include <cuda_runtime.h>
 
-__global__ void advanceParticles(float dt, particle * pArray, int nParticles)
-{
-	int idx = threadIdx.x + blockIdx.x*blockDim.x;
-	if(idx < nParticles)
-	{
-		pArray[idx].advance(dt);
-	}
-}
+#include "propagate.h"
+#include "v3.h"
 
 int main(int argc, char ** argv)
 {
-	int n = 1000000;
+	int n    = 1000000;
+        int seed = 0;
 	if(argc > 1)	{ n = atoi(argv[1]);}     // Number of particles
-	if(argc > 2)	{	srand(atoi(argv[2])); } // Random seed
+	if(argc > 2)	{ seed = atoi(argv[2]); } // Random seed
 
-	particle * pArray = new particle[n];
-	particle * devPArray = NULL;
-	cudaMalloc(&devPArray, n*sizeof(particle));
-	cudaMemcpy(devPArray, pArray, n*sizeof(particle), cudaMemcpyHostToDevice);
-	for(int i=0; i<100; i++)
-	{
-		float dt = (float)rand()/(float) RAND_MAX; // Random distance each step
-		advanceParticles<<< 1 +  n/256, 256>>>(dt, devPArray, n);
-		cudaDeviceSynchronize();
-	}
-	cudaMemcpy(pArray, devPArray, n*sizeof(particle), cudaMemcpyDeviceToHost);
-	v3 totalDistance(0,0,0);
-	v3 temp;
-	for(int i=0; i<n; i++)
-	{
-		temp = pArray[i].getTotalDistance();
-		totalDistance.x += temp.x;
-		totalDistance.y += temp.y;
-		totalDistance.z += temp.z;
-	}
+        v3 totalDistance = propagate(n, seed);
+
 	float avgX = totalDistance.x /(float)n;
 	float avgY = totalDistance.y /(float)n;
 	float avgZ = totalDistance.z /(float)n;

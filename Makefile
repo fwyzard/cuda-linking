@@ -23,10 +23,13 @@
 # OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-objects = main.o particle.o v3.o
+objects = main.o particle.o propagate.o v3.o
 
 all: $(objects)
 		nvcc -arch=sm_20 $(objects) -o app
+
+%.o: %.cc
+		nvcc -x c++ -I. -c $< -o $@
 
 %.o: %.cu
 		nvcc -x cu -arch=sm_20 -I. -dc $< -o $@
