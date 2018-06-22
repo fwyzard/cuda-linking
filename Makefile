@@ -28,7 +28,7 @@ objects = main.o particle.o v3.o
 all: $(objects)
 		nvcc -arch=sm_20 $(objects) -o app
 
-%.o: %.cpp
+%.o: %.cu
 		nvcc -x cu -arch=sm_20 -I. -dc $< -o $@
 
 clean:
