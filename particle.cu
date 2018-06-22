@@ -24,7 +24,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include <particle.h>
+
+#include "particle.h"
 
 particle::particle() : 	position(), velocity(), totalDistance(0,0,0)
 {}

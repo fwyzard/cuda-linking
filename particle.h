@@ -27,7 +27,7 @@
 #ifndef __particle_h__
 #define __particle_h__
 
-#include <v3.h>
+#include "v3.h"
 
 class particle
 {
