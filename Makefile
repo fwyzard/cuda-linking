@@ -23,16 +23,19 @@
 # OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+CUDA_ARCH=sm_50
+
 objects = main.o particle.o propagate.o v3.o
 
 all: $(objects)
-		nvcc -arch=sm_20 $(objects) -o app
+		nvcc -arch=$(CUDA_ARCH) $(objects) -o app
 
 %.o: %.cc
 		nvcc -x c++ -I. -c $< -o $@
 
 %.o: %.cu
-		nvcc -x cu -arch=sm_20 -I. -dc $< -o $@
+		nvcc -x cu -arch=$(CUDA_ARCH) -I. -dc $< -o $@
 
 clean:
 		rm -f *.o app
