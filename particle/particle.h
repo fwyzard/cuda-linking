@@ -24,47 +24,23 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef __particle_h__
+#define __particle_h__
 
-#include <cstdlib>
+#include "particle/v3.h"
 
-#include <cuda_runtime.h>
-
-#include "particle.h"
-#include "propagate.h"
-
-__global__ void advanceParticles(float dt, particle * pArray, int nParticles)
+class particle
 {
-	int idx = threadIdx.x + blockIdx.x*blockDim.x;
-	if(idx < nParticles)
-	{
-		pArray[idx].advance(dt);
-	}
-}
+	private:
+		v3 position;
+		v3 velocity;
+		v3 totalDistance;
 
+	public:
+		particle();
+		__host__ __device__ void advance(float dist);
+		const v3& getTotalDistance() const;
 
-v3 propagate(int n, int seed)
-{
-        srand(seed);
+};
 
-	particle * pArray = new particle[n];
-	particle * devPArray = NULL;
-	cudaMalloc(&devPArray, n*sizeof(particle));
-	cudaMemcpy(devPArray, pArray, n*sizeof(particle), cudaMemcpyHostToDevice);
-	for(int i=0; i<100; i++)
-	{
-		float dt = (float)rand()/(float) RAND_MAX; // Random distance each step
-		advanceParticles<<< 1 +  n/256, 256>>>(dt, devPArray, n);
-		cudaDeviceSynchronize();
-	}
-	cudaMemcpy(pArray, devPArray, n*sizeof(particle), cudaMemcpyDeviceToHost);
-	v3 totalDistance(0,0,0);
-	v3 temp;
-	for(int i=0; i<n; i++)
-	{
-		temp = pArray[i].getTotalDistance();
-		totalDistance.x += temp.x;
-		totalDistance.y += temp.y;
-		totalDistance.z += temp.z;
-	}
-        return totalDistance;
-}
+#endif

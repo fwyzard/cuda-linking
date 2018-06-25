@@ -26,7 +26,7 @@
 
 CUDA_ARCH=sm_50
 
-objects = main.o particle.o propagate.o v3.o
+objects = main.o particle/particle.o particle/v3.o propagate/propagate.o
 
 all: $(objects)
 		nvcc -arch=$(CUDA_ARCH) $(objects) -o app
@@ -38,4 +38,4 @@ all: $(objects)
 		nvcc -x cu -arch=$(CUDA_ARCH) -I. -dc $< -o $@
 
 clean:
-		rm -f *.o app
+		rm -f */*.o *.o app

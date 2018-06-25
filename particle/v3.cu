@@ -25,26 +25,37 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "particle.h"
+#include <cmath>
 
-particle::particle() : 	position(), velocity(), totalDistance(0,0,0)
+#include "particle/v3.h"
+
+v3::v3()
+{	randomize(); }
+
+v3::v3(float xIn, float yIn, float zIn) : x(xIn), y(yIn), z(zIn)
 {}
 
-__device__ __host__ 
-void particle::advance(float d)
+void v3::randomize()
 {
-	velocity.normalize();
-	float dx = d * velocity.x;
-	position.x += dx;
-	totalDistance.x += dx;
-	float dy = d * velocity.y;
- 	position.y += dy;
- 	totalDistance.y += dy;
- 	float dz = d * velocity.z;
-	position.z += dz;
-	totalDistance.z += dz;
-	velocity.scramble();
+	x = (float)rand() / (float)RAND_MAX;
+	y = (float)rand() / (float)RAND_MAX;
+	z = (float)rand() / (float)RAND_MAX;
 }
 
-const v3& particle::getTotalDistance() const
-{	return totalDistance; }
+__host__ __device__ void v3::normalize()
+{
+	float t = sqrt(x*x + y*y + z*z);
+	x /= t;
+	y /= t;
+	z /= t;
+}
+
+__host__ __device__ void v3::scramble()
+{
+	float tx = 0.317f*(x + 1.0) + y + z * x * x + y + z;
+	float ty = 0.619f*(y + 1.0) + y * y + x * y * z + y + x;
+	float tz = 0.124f*(z + 1.0) + z * y + x * y * z + y + x;
+	x = tx;
+	y = ty;
+	z = tz;
+}

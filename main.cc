@@ -31,8 +31,8 @@
 
 #include <cuda_runtime.h>
 
-#include "propagate.h"
-#include "v3.h"
+#include "particle/v3.h"
+#include "propagate/propagate.h"
 
 int main(int argc, char ** argv)
 {
