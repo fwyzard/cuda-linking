@@ -1,41 +1,62 @@
-# Copyright (c) 1993-2015, NVIDIA CORPORATION. All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#  * Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-#  * Redistributions in binary form must reproduce the above copyright
-#    notice, this list of conditions and the following disclaimer in the
-#    documentation and/or other materials provided with the distribution.
-#  * Neither the name of NVIDIA CORPORATION nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
-# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-# PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
-# OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# When building a library with CUDA code we should support diverse scenarios,
+# where the CUDA code in the library may be used by:
+#   - host code in the library itself (i.e. a kernel defined and used within the library)
+#   - host code in a user program or library (i.e. a kernel defined in the library)
+#   - CUDA code in a user program or library (i.e. __device__ code in the library)
 
+.PHONY: all clean
+
+CUDA_BASE=/usr/local/cuda-9.2
 CUDA_ARCH=sm_50
 
-objects = main.o particle/particle.o particle/v3.o propagate/propagate.o
+HOST_CXX=g++
+HOST_CXXFLAGS=-fPIC -Wall
 
-all: $(objects)
-		nvcc -arch=$(CUDA_ARCH) $(objects) -o app
+CXXFLAGS=-std=c++14 -O2 -I$(CUDA_BASE)/include -I.
 
-%.o: %.cc
-		nvcc -x c++ -I. -c $< -o $@
+LDFLAGS=-L.
+CUDA_LDFLAGS=-L$(CUDA_BASE)/lib64/stubs -L$(CUDA_BASE)/lib64 -lcudadevrt -lcudart -lrt -lpthread -ldl
 
-%.o: %.cu
-		nvcc -x cu -arch=$(CUDA_ARCH) -I. -dc $< -o $@
+PARTICLE_OBJECTS  = particle/particle.o particle/v3.o
+PROPAGATE_OBJECTS = propagate/propagate.o
+DEVICE_OBJECTS    = $(PARTICLE_OBJECTS) $(PROPAGATE_OBJECTS)
+OBJECTS           = main.o $(DEVICE_OBJECTS)
+
+all: app
 
 clean:
-		rm -f */*.o *.o app
+	rm -f */*.o *.o *.a *.so app*
+
+%.o: %.cc
+	# compile individual host-only files
+	#$(CUDA_BASE)/bin/nvcc -x c++ $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -c $< -o $@
+	$(HOST_CXX) $(CXXFLAGS) $(HOST_CXXFLAGS) -c $< -o $@
+
+%.o: %.cu
+	# compile individual host/device files
+	$(CUDA_BASE)/bin/nvcc -x cu $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -dc $< -o $@
+
+libparticle.cuda.a: $(PARTICLE_OBJECTS)
+	# build a static library with the device (and host) code
+	ar crs $@ $^
+
+libparticle.so: $(PARTICLE_OBJECTS)
+	# build a shared library with the (devide and) host code
+	$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) -o libparticle.o
+	$(HOST_CXX) -shared $(HOST_CXXFLAGS) $^ libparticle.o -o $@
+
+libpropagate.cuda.a: $(PROPAGATE_OBJECTS)
+	# build a static library with the device (and host) code
+	ar crs $@ $^
+
+libpropagate.so: $(PROPAGATE_OBJECTS) libparticle.cuda.a libparticle.so
+	# build a shared library with the (devide and) host code
+	$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -lparticle.cuda -o libpropagate.o
+	$(HOST_CXX) -shared $(HOST_CXXFLAGS) $^ $(LDFLAGS) -lparticle libpropagate.o -o $@
+
+# link the main executable
+
+app: main.o libparticle.so libpropagate.so
+	# call the host linker to build the executable
+	$(HOST_CXX) main.o $(LDFLAGS) -lpropagate -lparticle $(CUDA_LDFLAGS) -o $@
+
