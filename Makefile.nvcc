@@ -7,7 +7,8 @@
 .PHONY: all clean
 
 CUDA_BASE=/usr/local/cuda-9.2
-CUDA_ARCH=sm_50
+CUDA_ARCH=sm_35 sm_50 sm_61
+CUDA_CXXFLAGS=$(foreach ARCH,$(CUDA_ARCH),-gencode arch=$(ARCH:sm_%=compute_%),code=$(ARCH))
 
 HOST_CXX=g++
 HOST_CXXFLAGS=-fPIC -Wall
@@ -29,12 +30,12 @@ clean:
 
 %.o: %.cc
 	# compile individual host-only files
-	#$(CUDA_BASE)/bin/nvcc -x c++ $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -c $< -o $@
+	#$(CUDA_BASE)/bin/nvcc -x c++ $(CXXFLAGS) $(CUDA_CXXFLAGS) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -c $< -o $@
 	$(HOST_CXX) $(CXXFLAGS) $(HOST_CXXFLAGS) -c $< -o $@
 
 %.o: %.cu
 	# compile individual host/device files
-	$(CUDA_BASE)/bin/nvcc -x cu $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -dc $< -o $@
+	$(CUDA_BASE)/bin/nvcc -x cu $(CXXFLAGS) $(CUDA_CXXFLAGS) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -dc $< -o $@
 
 libparticle.cuda.a: $(PARTICLE_OBJECTS)
 	# build a static library with the device (and host) code
@@ -42,7 +43,7 @@ libparticle.cuda.a: $(PARTICLE_OBJECTS)
 
 libparticle.so: $(PARTICLE_OBJECTS)
 	# build a shared library with the (devide and) host code
-	$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) -o libparticle.o
+	$(CUDA_BASE)/bin/nvcc $(CUDA_CXXFLAGS) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) -o libparticle.o
 	$(HOST_CXX) -shared $(HOST_CXXFLAGS) $^ libparticle.o -o $@
 
 libpropagate.cuda.a: $(PROPAGATE_OBJECTS)
@@ -51,7 +52,7 @@ libpropagate.cuda.a: $(PROPAGATE_OBJECTS)
 
 libpropagate.so: $(PROPAGATE_OBJECTS) libparticle.cuda.a libparticle.so
 	# build a shared library with the (devide and) host code
-	$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -lparticle.cuda -o libpropagate.o
+	$(CUDA_BASE)/bin/nvcc $(CUDA_CXXFLAGS) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -lparticle.cuda -o libpropagate.o
 	$(HOST_CXX) -shared $(HOST_CXXFLAGS) $^ $(LDFLAGS) -lparticle libpropagate.o -o $@
 
 # link the main executable
