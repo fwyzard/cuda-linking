@@ -1,0 +1,76 @@
+# When building a library with CUDA code we should support diverse scenarios,
+# where the CUDA code in the library may be used by:
+#   - host code in the library itself (i.e. a kernel defined and used within the library)
+#   - host code in a user program or library (i.e. a kernel defined in the library)
+#   - CUDA code in a user program or library (i.e. __device__ code in the library)
+
+.PHONY: all clean
+
+CUDA_BASE=/usr/local/cuda-9.2
+CUDA_ARCH=sm_50
+CUDA_CXXFLAGS=--cuda-path=$(CUDA_BASE) --cuda-gpu-arch=$(CUDA_ARCH) -fcuda-rdc --no-cuda-include-ptx=all
+CUDA_DEFINES=-D__CUDACC_VER_MAJOR__=9 -D__CUDACC_VER_MINOR__=2 -D__CUDACC_VER_BUILD__=88 -D__NV_EXTRA_INITIALIZATION= -D__NV_EXTRA_FINALIZATION=
+
+HOST_CXX=clang++-7
+HOST_CXXFLAGS=-fPIC -Wall
+
+CXXFLAGS=-std=c++14 -O2 -I$(CUDA_BASE)/include -I.
+
+LDFLAGS=-L.
+CUDA_LDFLAGS=-L$(CUDA_BASE)/lib64/stubs -L$(CUDA_BASE)/lib64 -lcudadevrt -lcudart -lrt -lpthread -ldl
+CUDA_DEVICE_LDFLAGS=-L$(CUDA_BASE)/lib64/stubs -L$(CUDA_BASE)/lib64 -lcudadevrt
+
+PARTICLE_OBJECTS  = particle/particle.o particle/v3.o
+PROPAGATE_OBJECTS = propagate/propagate.o
+DEVICE_OBJECTS    = $(PARTICLE_OBJECTS) $(PROPAGATE_OBJECTS)
+OBJECTS           = main.o $(DEVICE_OBJECTS)
+
+all: app
+
+clean:
+	rm -f */*.o *.o *.a *.so app*
+
+%.o: %.cc
+	# compile individual host-only files
+	#$(CUDA_BASE)/bin/nvcc -x c++ $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -c $< -o $@
+	$(HOST_CXX) $(CXXFLAGS) $(HOST_CXXFLAGS) -c $< -o $@
+
+%.o: %.cu
+	# compile individual host/device files
+	#$(CUDA_BASE)/bin/nvcc -x cu $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -dc $< -o $@
+	$(HOST_CXX) -x cuda $(CUDA_CXXFLAGS) $(CXXFLAGS) $(HOST_CXXFLAGS) -c $< -o $@
+
+libparticle.cuda.a: $(PARTICLE_OBJECTS)
+	# build a static library with the device (and host) code
+	ar crs $@ $^
+
+libparticle.so: $(PARTICLE_OBJECTS)
+	# build a shared library with the (device and) host code
+	@$(eval TMPDIR:=$(shell mktemp -d))
+	#$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -o $(TMPDIR)/$(basename $@).o
+	$(CUDA_BASE)/bin/nvlink --arch=$(CUDA_ARCH) --register-link-binaries=$(TMPDIR)/$(basename $@).reg.c -m64 -cpu-arch=X86_64 $(filter %.o,$^) $(LDFLAGS) $(CUDA_DEVICE_LDFLAGS) -o $(TMPDIR)/$(basename $@).$(CUDA_ARCH).cubin
+	$(CUDA_BASE)/bin/fatbinary --bin2c-path=$(CUDA_BASE)/bin --create=$(TMPDIR)/$(basename $@).fatbin -64 --cmdline=--compile-only -link --image=profile=$(CUDA_ARCH),file=$(TMPDIR)/$(basename $@).$(CUDA_ARCH).cubin --embedded-fatbin=$(TMPDIR)/$(basename $@).fatbin.c 
+	$(HOST_CXX) -x c++ $(CXXFLAGS) $(HOST_CXXFLAGS) $(CUDA_DEFINES) -DFATBINFILE=\"$(TMPDIR)/$(basename $@).fatbin.c\" -DREGISTERLINKBINARYFILE=\"$(TMPDIR)/$(basename $@).reg.c\" -c $(CUDA_BASE)/bin/crt/link.stub -o $(TMPDIR)/$(basename $@).o
+	$(HOST_CXX) -shared $(HOST_CXXFLAGS) $^ $(TMPDIR)/$(basename $@).o $(LDFLAGS) -o $@
+	@rm -rf $(TMPDIR)
+
+libpropagate.cuda.a: $(PROPAGATE_OBJECTS)
+	# build a static library with the device (and host) code
+	ar crs $@ $^
+
+libpropagate.so: $(PROPAGATE_OBJECTS) libparticle.cuda.a libparticle.so
+	# build a shared library with the (devide and) host code
+	@$(eval TMPDIR:=$(shell mktemp -d))
+	#$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -lparticle.cuda -o $(TMPDIR)/$(basename $@).o
+	$(CUDA_BASE)/bin/nvlink --arch=$(CUDA_ARCH) --register-link-binaries=$(TMPDIR)/$(basename $@).reg.c -m64 -cpu-arch=X86_64 $(filter %.o,$^) $(LDFLAGS) -lparticle.cuda $(CUDA_DEVICE_LDFLAGS) -o $(TMPDIR)/$(basename $@).$(CUDA_ARCH).cubin
+	$(CUDA_BASE)/bin/fatbinary --bin2c-path=$(CUDA_BASE)/bin --create=$(TMPDIR)/$(basename $@).fatbin -64 --cmdline=--compile-only -link --image=profile=$(CUDA_ARCH),file=$(TMPDIR)/$(basename $@).$(CUDA_ARCH).cubin --embedded-fatbin=$(TMPDIR)/$(basename $@).fatbin.c 
+	$(HOST_CXX) -x c++ $(CXXFLAGS) $(HOST_CXXFLAGS) $(CUDA_DEFINES) -DFATBINFILE=\"$(TMPDIR)/$(basename $@).fatbin.c\" -DREGISTERLINKBINARYFILE=\"$(TMPDIR)/$(basename $@).reg.c\" -c $(CUDA_BASE)/bin/crt/link.stub -o $(TMPDIR)/$(basename $@).o
+	$(HOST_CXX) -shared $(HOST_CXXFLAGS) $^ $(TMPDIR)/$(basename $@).o $(LDFLAGS) -lparticle -o $@
+	@rm -rf $(TMPDIR)
+
+# link the main executable
+
+app: main.o libparticle.so libpropagate.so
+	# call the host linker to build the executable
+	$(HOST_CXX) main.o $(LDFLAGS) -lpropagate -lparticle $(CUDA_LDFLAGS) -o $@
+

@@ -1,0 +1,62 @@
+# When building a library with CUDA code we should support diverse scenarios,
+# where the CUDA code in the library may be used by:
+#   - host code in the library itself (i.e. a kernel defined and used within the library)
+#   - host code in a user program or library (i.e. a kernel defined in the library)
+#   - CUDA code in a user program or library (i.e. __device__ code in the library)
+
+.PHONY: all clean
+
+CUDA_BASE=/usr/local/cuda-9.2
+CUDA_ARCH=sm_50
+
+HOST_CXX=g++
+HOST_CXXFLAGS=-fPIC -Wall
+
+CXXFLAGS=-std=c++14 -O2 -I$(CUDA_BASE)/include -I.
+
+LDFLAGS=-L.
+CUDA_LDFLAGS=-L$(CUDA_BASE)/lib64/stubs -L$(CUDA_BASE)/lib64 -lcudadevrt -lcudart -lrt -lpthread -ldl
+
+PARTICLE_OBJECTS  = particle/particle.o particle/v3.o
+PROPAGATE_OBJECTS = propagate/propagate.o
+DEVICE_OBJECTS    = $(PARTICLE_OBJECTS) $(PROPAGATE_OBJECTS)
+OBJECTS           = main.o $(DEVICE_OBJECTS)
+
+all: app
+
+clean:
+	rm -f */*.o *.o *.a *.so app*
+
+%.o: %.cc
+	# compile individual host-only files
+	#$(CUDA_BASE)/bin/nvcc -x c++ $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -c $< -o $@
+	$(HOST_CXX) $(CXXFLAGS) $(HOST_CXXFLAGS) -c $< -o $@
+
+%.o: %.cu
+	# compile individual host/device files
+	$(CUDA_BASE)/bin/nvcc -x cu $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -dc $< -o $@
+
+libparticle.cuda.a: $(PARTICLE_OBJECTS)
+	# build a static library with the device (and host) code
+	ar crs $@ $^
+
+libparticle.so: $(PARTICLE_OBJECTS)
+	# build a shared library with the (devide and) host code
+	$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) -o libparticle.o
+	$(HOST_CXX) -shared $(HOST_CXXFLAGS) $^ libparticle.o -o $@
+
+libpropagate.cuda.a: $(PROPAGATE_OBJECTS)
+	# build a static library with the device (and host) code
+	ar crs $@ $^
+
+libpropagate.so: $(PROPAGATE_OBJECTS) libparticle.cuda.a libparticle.so
+	# build a shared library with the (devide and) host code
+	$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -lparticle.cuda -o libpropagate.o
+	$(HOST_CXX) -shared $(HOST_CXXFLAGS) $^ $(LDFLAGS) -lparticle libpropagate.o -o $@
+
+# link the main executable
+
+app: main.o libparticle.so libpropagate.so
+	# call the host linker to build the executable
+	$(HOST_CXX) main.o $(LDFLAGS) -lpropagate -lparticle $(CUDA_LDFLAGS) -o $@
+
