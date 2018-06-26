@@ -17,3 +17,6 @@ nvlink: Makefile.nvlink
 
 clang: Makefile.clang
 	make -f Makefile.clang
+
+single: Makefile.single
+	make -f Makefile.single

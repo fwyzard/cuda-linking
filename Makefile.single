@@ -1,0 +1,34 @@
+# When building a library with CUDA code we should support diverse scenarios,
+# where the CUDA code in the library may be used by:
+#   - host code in the library itself (i.e. a kernel defined and used within the library)
+#   - host code in a user program or library (i.e. a kernel defined in the library)
+#   - CUDA code in a user program or library (i.e. __device__ code in the library)
+
+.PHONY: all clean
+
+CUDA_BASE=/usr/local/cuda-9.2
+CUDA_ARCH=sm_35 sm_50 sm_61
+CUDA_CXXFLAGS=$(foreach ARCH,$(CUDA_ARCH),-gencode arch=$(ARCH:sm_%=compute_%),code=$(ARCH))
+
+HOST_CXX=g++
+HOST_CXXFLAGS=-fPIC -Wall
+
+CXXFLAGS=-std=c++14 -O2 -I$(CUDA_BASE)/include -I.
+
+LDFLAGS=-L.
+CUDA_LDFLAGS=-L$(CUDA_BASE)/lib64/stubs -L$(CUDA_BASE)/lib64 -lcudadevrt -lcudart -lrt -lpthread -ldl
+
+PARTICLE_OBJECTS  = particle/particle.o particle/v3.o
+PROPAGATE_OBJECTS = propagate/propagate.o
+DEVICE_OBJECTS    = $(PARTICLE_OBJECTS) $(PROPAGATE_OBJECTS)
+OBJECTS           = main.o $(DEVICE_OBJECTS)
+
+all: app
+
+clean:
+	rm -f */*.o *.o *.a *.so app*
+
+app: particle/particle.cu particle/v3.cu propagate/propagate.cu main.cc
+	# call the host linker to build the executable
+	cat $^ | $(CUDA_BASE)/bin/nvcc -x cu $(CXXFLAGS) $(CUDA_CXXFLAGS) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' - -o $@
+
