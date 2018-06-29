@@ -4,19 +4,12 @@
 #   - host code in a user program or library (i.e. a kernel defined in the library)
 #   - CUDA code in a user program or library (i.e. __device__ code in the library)
 
-.PHONY: clean nvcc nvlink clang
+.PHONY: clean all nvcc nvlink clang single
+
+all: nvcc nvlink clang single
 
 clean:
-	rm -f */*.o *.o *.a *.so app*
+	rm -rf build.*
 
-nvcc: Makefile.nvcc
-	make -f Makefile.nvcc
-
-nvlink: Makefile.nvlink
-	make -f Makefile.nvlink
-
-clang: Makefile.clang
-	make -f Makefile.clang
-
-single: Makefile.single
-	make -f Makefile.single
+nvcc nvlink clang single: %: Makefile.%
+	$(MAKE) -f $<

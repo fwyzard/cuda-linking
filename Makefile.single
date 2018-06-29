@@ -6,6 +6,8 @@
 
 .PHONY: all clean
 
+BUILD:=build$(suffix $(word 1, $(MAKEFILE_LIST)))
+
 CUDA_BASE=/usr/local/cuda-9.2
 CUDA_ARCH=sm_35 sm_50 sm_61
 CUDA_CXXFLAGS=$(foreach ARCH,$(CUDA_ARCH),-gencode arch=$(ARCH:sm_%=compute_%),code=$(ARCH))
@@ -15,20 +17,15 @@ HOST_CXXFLAGS=-fPIC -Wall
 
 CXXFLAGS=-std=c++14 -O2 -I$(CUDA_BASE)/include -I.
 
-LDFLAGS=-L.
 CUDA_LDFLAGS=-L$(CUDA_BASE)/lib64/stubs -L$(CUDA_BASE)/lib64 -lcudadevrt -lcudart -lrt -lpthread -ldl
 
-PARTICLE_OBJECTS  = particle/particle.o particle/v3.o
-PROPAGATE_OBJECTS = propagate/propagate.o
-DEVICE_OBJECTS    = $(PARTICLE_OBJECTS) $(PROPAGATE_OBJECTS)
-OBJECTS           = main.o $(DEVICE_OBJECTS)
-
-all: app
+all: $(BUILD)/app
+	echo ./$(BUILD)/app
 
 clean:
-	rm -f */*.o *.o *.a *.so app*
+	rm -rf $(BUILD)
 
-app: particle/particle.cu particle/v3.cu propagate/propagate.cu main.cc
+$(BUILD)/app: particle/particle.cu particle/v3.cu propagate/propagate.cu main.cc
+	@mkdir -p $(dir $@)
 	# call the host linker to build the executable
 	cat $^ | $(CUDA_BASE)/bin/nvcc -x cu $(CXXFLAGS) $(CUDA_CXXFLAGS) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' - -o $@
-
