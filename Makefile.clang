@@ -33,13 +33,13 @@ clean:
 $(BUILD)/%.o: %.cc
 	@mkdir -p $(dir $@)
 	# compile individual host-only files
-	#$(CUDA_BASE)/bin/nvcc -x c++ $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -c $< -o $@
+	@#$(CUDA_BASE)/bin/nvcc -x c++ $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -c $< -o $@
 	$(HOST_CXX) $(CXXFLAGS) $(HOST_CXXFLAGS) -c $< -o $@
 
 $(BUILD)/%.o $(BUILD)/%.cuda.o: %.cu
 	@mkdir -p $(dir $@)
 	# compile individual host/device files
-	#$(CUDA_BASE)/bin/nvcc -x cu $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -dc $< -o $@
+	@#$(CUDA_BASE)/bin/nvcc -x cu $(CXXFLAGS) -arch=$(CUDA_ARCH) -ccbin $(HOST_CXX) -Xcompiler '$(HOST_CXXFLAGS)' -dc $< -o $@
 	$(HOST_CXX) -x cuda $(CUDA_CXXFLAGS) $(CXXFLAGS) $(HOST_CXXFLAGS) -c $< -o $@
 	# extract CUDA fatbin to a separate object file
 	objcopy -j '.nv*' -j '__nv*' $(BUILD)/$*.o $(BUILD)/$*.cuda.o
@@ -53,7 +53,7 @@ $(BUILD)/libparticle.so: $(PARTICLE_OBJECTS)
 	@mkdir -p $(dir $@)
 	# build a shared library with the host and device code
 	@$(eval TMPDIR:=$(shell mktemp -d))
-	#$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -o $(TMPDIR)/$(basename $(@F)).o
+	@#$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -o $(TMPDIR)/$(basename $(@F)).o
 	for ARCH in $(CUDA_ARCH); do \
 	  $(CUDA_BASE)/bin/nvlink --arch=$$ARCH --register-link-binaries=$(TMPDIR)/$(basename $(@F)).reg.c -m64 -cpu-arch=X86_64 $(filter %.o,$^) $(LDFLAGS) $(CUDA_DEVICE_LDFLAGS) -o $(TMPDIR)/$(basename $(@F)).$$ARCH.cubin; \
 	done
@@ -71,7 +71,7 @@ $(BUILD)/libpropagate.so: $(PROPAGATE_OBJECTS) $(BUILD)/libparticle.cuda.a $(BUI
 	@mkdir -p $(dir $@)
 	# build a shared library with the host and device code
 	@$(eval TMPDIR:=$(shell mktemp -d))
-	#$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -lparticle.cuda -o $(TMPDIR)/$(basename $(@F)).o
+	@#$(CUDA_BASE)/bin/nvcc -arch=$(CUDA_ARCH) -Xcompiler '$(HOST_CXXFLAGS)' -dlink $(filter %.o,$^) $(LDFLAGS) -lparticle.cuda -o $(TMPDIR)/$(basename $(@F)).o
 	for ARCH in $(CUDA_ARCH); do \
 	  $(CUDA_BASE)/bin/nvlink --arch=$$ARCH --register-link-binaries=$(TMPDIR)/$(basename $(@F)).reg.c -m64 -cpu-arch=X86_64 $(filter %.o,$^) $(LDFLAGS) -lparticle.cuda $(CUDA_DEVICE_LDFLAGS) -o $(TMPDIR)/$(basename $(@F)).$$ARCH.cubin; \
 	done
